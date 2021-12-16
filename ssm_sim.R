@@ -5,7 +5,7 @@ q975  = function(x) quantile(x,0.975)
 bst2b = function(x) 1/(1+exp(-x))
 b2bst = function(x) log(x)-log(1-x)
 
-nn       = 1000
+nn       = 100
 alpha.tr = 0.01
 beta.tr  = 0.95
 tau.tr   = 0.5
@@ -22,7 +22,7 @@ par(mfrow=c(1,1))
 plot(y,type='l',lwd=2,col='gray80')
 lines(x.tr,col=2,lwd=2)
 
-N   = 100000 #number of particles
+N   = 10000 #number of particles
 # ONLY filtering
 # resample-propagate-resample
 xss = matrix(NA,ncol=3,nrow=nn)
@@ -45,21 +45,24 @@ lines(xss[,2],col=3,lwd=2)
 ###################
 ## parameter estimation
 ###################
-runs  = 10
+
+runs  = 2
 res   = list()
 
-for(j in 1:runs)
-{
+for(j in 1:runs){
     delta = runif(1,0.95,0.99) #0.95-0.99
     b2    = 1-((3*delta-1)/(2*delta))^2
     a     = sqrt(1-b2)
 
-    th0   = cbind(rnorm(N,0,3),rnorm(N,0,3),rnorm(N,0,0.5))
+    th0   = cbind(rnorm(N,0,3),rnorm(N,3,3),rnorm(N,0,0.5))
     x0    = rnorm(N,th0[,1]/(1-bst2b(th0[,2])),sqrt(exp(th0[,3])^2/(1-bst2b(th0[,2])^2)))
 
     npar  = ncol(th0)
     xss   = matrix(NA,ncol=3,nrow=nn)
     thss  = array(NA,c(nn,npar,3))
+
+    st.ah = 20 # max step ahead
+    forc  = matrix(NA,ncol = st.ah,nrow = nn)
 
     for(t in 1:nn){
 
@@ -81,9 +84,15 @@ for(j in 1:runs)
         thss[t,,1] = apply(th0,2,q025)
         thss[t,,2] = apply(th0,2,median)
         thss[t,,3] = apply(th0,2,q975)
-    }
 
-    res[[j]] = list(xs=xss,th=thss)
+        tmpforc   = th0[,1]+bst2b(th0[,2])*x0
+        forc[t,1] = median(tmpforc)
+        for(h in 2:st.ah){
+            tmpforc  = th0[,1]+bst2b(th0[,2])*tmpforc
+            forc[t,h] = median(tmpforc)
+        }
+    }
+    res[[j]] = list(xs=xss,th=thss,forc=forc)
 }
 
 
@@ -91,11 +100,11 @@ par(mfrow=c(2,2))
 plot(x.tr,type='l',col=2,lwd=3)
 for(j in 1:runs){
     lines(res[[j]]$xs[,2])
-    lines(res[[j]]$xs[,1],col='gray80')
-    lines(res[[j]]$xs[,3],col='gray80')
+    # lines(res[[j]]$xs[,1],col='gray80')
+    # lines(res[[j]]$xs[,3],col='gray80')
 }
 
-plot(res[[1]]$th[,1,2],type='l',ylim=c(-0.1,0.1))
+plot(res[[1]]$th[,1,2],type='l',ylim=c(min(res[[1]]$th[,1,]),max(res[[1]]$th[,1,])))
 for(j in 1:runs){
     lines(res[[j]]$th[,1,2])
     lines(res[[j]]$th[,1,1],col='gray80')
@@ -120,5 +129,12 @@ for(j in 1:runs){
     lines(res[[j]]$th[,3,3],col='gray80')
 }
 abline(h=log(tau.tr),col=2,lwd=3)
+
+# 1-step-ahead predictions
+par(mfrow=c(1,1))
+plot(tail(x.tr,nn-1),type='l')
+for(j in 1:runs){
+    lines(head(res[[j]]$forc[,1],nn-1),col='gray80',lwd=2)
+}
 
 
